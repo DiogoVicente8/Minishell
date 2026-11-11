@@ -1,22 +1,25 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -pedantic -pthread -std=c11 -D_POSIX_C_SOURCE=200809L -Iinclude
-LDLIBS  = -lreadline
-SRC     = $(wildcard src/*.c)
-OBJ     = $(SRC:src/%.c=build/%.o)
-TARGET  = minishell
+CC = gcc
+CPPFLAGS = -D_POSIX_C_SOURCE=200809L -Iinclude
+CFLAGS = -Wall -Wextra -pedantic -pthread -std=c11 -g
+LDLIBS = -lreadline -pthread
+
+TARGET = minishell
+SRCS = $(wildcard src/*.c)
+OBJS = $(SRCS:.c=.o)
+HEADERS = $(wildcard include/*.h)
 
 all: $(TARGET)
 
-$(TARGET): $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
+$(TARGET): $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(LDLIBS)
 
-build/%.o: src/%.c | build
-	$(CC) $(CFLAGS) -c $< -o $@
-
-build:
-	mkdir -p build
+src/%.o: src/%.c $(HEADERS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -rf build $(TARGET)
+	rm -f $(OBJS) $(TARGET)
 
-.PHONY: all clean
+run: $(TARGET)
+	./$(TARGET)
+
+.PHONY: all clean run
