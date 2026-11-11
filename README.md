@@ -1,68 +1,129 @@
-# Minishell em C — Estrutura inicial da Fase 1
+# Minishell em C 
 
-Projeto de Sistemas Operativos, **apenas Fase 1 (10 valores)**. Os ficheiros `src/parse.c` e `include/header.h` foram mantidos a partir do `parse.zip` do docente. O `main.c` foi adaptado para encaminhar os comandos para os modulos de execucao. O projeto e um **esqueleto**, nao a solucao da fase.
+Projeto prático da unidade curricular de **Sistemas Operativos**
 
-## Estrutura
-
-```text
-Minishell_Fase1/
-├── src/
-│   ├── main.c         # REPL: leitura, parser e libertacao da memoria
-│   ├── parse.c        # Parser original do docente
-│   ├── execute.c      # Execucao de comandos externos e coordenacao
-│   ├── builtins.c     # cd, pwd, exit, history, echo, help
-│   ├── redirect.c     # <, >, >>, 2>
-│   ├── pipes.c        # Comandos ligados por pipes
-│   └── signals.c      # SIGCHLD, SIGINT, SIGTSTP
-├── include/
-│   ├── header.h       # Estrutura CMD original do docente
-│   └── minishell.h    # Prototipos dos modulos
-├── tests/
-│   └── testes_fase1.md
-├── Makefile
-├── .gitignore
-└── README.md
-```
+Os ficheiros `src/parse.c` e `include/header.h`, fornecidos pelo docente, foram mantidos sem alterações. A preparação dos operadores é feita em `src/main.c` para permitir a utilização do parser original.
 
 ## Requisitos
 
-Ubuntu/Linux, `gcc`, `make` e GNU Readline. Em Ubuntu:
+- Ubuntu/Linux
+- GCC e Make
+- Biblioteca GNU Readline
 
-```bash
-sudo apt install build-essential libreadline-dev
-```
+## Compilação e execução
 
-## Compilar e executar
+Na pasta principal do projeto:
 
 ```bash
 make
 ./minishell
 ```
 
-Para limpar: `make clean`.
+A Minishell apresenta o prompt `msh$`. Para sair, escrever `exit` ou carregar em **Ctrl+D**.
 
-## O que funciona agora
+## Funcionalidades implementadas
 
-- Prompt `msh$` com GNU Readline.
-- Interpretacao inicial da linha pelo parser do docente.
-- Libertacao da lista ligada e da entrada lida.
-- `exit` e Ctrl+D para sair.
+### Comandos internos
 
-**Nota:** os comandos `ls`, `pwd`, `cd`, pipes, redirecionamentos, background e tratamento de sinais **ainda nao estao implementados**. Os respetivos modulos contem `TODO`.
+- `cd [diretoria]` — muda de diretoria; sem argumento, usa `HOME`.
+- `pwd` — apresenta a diretoria atual.
+- `exit` — termina a Minishell.
+- `history` — mostra o histórico de comandos da sessão.
+- `echo [texto]` — escreve os argumentos no terminal.
+- `help` — apresenta a ajuda.
 
-## Ordem recomendada de implementacao (Fase 1)
+Os comandos internos simples são executados no processo da shell. Em pipelines e em background, são executados em processos filhos.
 
-1. `execute.c`: `fork()`, `execvp()` e `waitpid()`.
-2. `builtins.c`: `cd`, `pwd`, `history`, `echo`, `help` (o `exit` basico ja existe).
-3. Adaptar o parser e executor para `&` (background).
-4. `redirect.c`: `open()`, `dup2()`, `close()`, incluindo `>>`.
-5. `pipes.c`: ligar multiplos processos com `pipe()` e `dup2()`.
-6. `signals.c`: `SIGCHLD`, `SIGINT` e `SIGTSTP`; testar memoria e erros.
+### Comandos externos
 
-### Limitacoes do parser fornecido
+São executados usando `fork()` e `execvp()`. No foreground, a Minishell espera pela conclusão com `waitpid()`.
 
-O parser original separa sobretudo os argumentos por espacos. Ainda nao fornece os indicadores necessarios para distinguir `>>` e `&`; sera necessario adaptar o parser e/ou a estrutura de comandos. Ao expandir o parser, manter a gestao correta da memoria.
+```text
+msh$ ls -l
+msh$ date
+msh$ whoami
+```
 
-## Compilacao
+### Background (`&`)
 
-O Makefile usa `-Wall -Wextra -pedantic -pthread -std=c11` como pede o enunciado.
+O operador `&` no fim da linha executa os comandos sem bloquear o prompt e apresenta o PID do primeiro processo.
+
+```text
+msh$ sleep 5 &
+msh$ sleep 5 | cat &
+```
+
+O sinal `SIGCHLD` é utilizado para recolher processos terminados. Na ausência de redirecionamento de entrada, o primeiro comando em background lê de `/dev/null`.
+
+### Redirecionamentos
+
+| Operador | Função |
+|---|---|
+| `<` | Entrada a partir de um ficheiro |
+| `>` | Saída para um ficheiro, substituindo o conteúdo |
+| `>>` | Saída acrescentada ao fim do ficheiro |
+| `2>` | Saída de erro para um ficheiro |
+
+```text
+msh$ echo Ola > teste.txt
+msh$ echo Mundo >> teste.txt
+msh$ cat < teste.txt
+msh$ ls pasta_inexistente 2> erros.txt
+```
+
+Os redirecionamentos também são aplicáveis a comandos internos, como `echo`.
+
+### Pipes (`|`)
+
+É possível ligar vários comandos num pipeline. O código cria um filho por comando e liga a entrada e a saída com `pipe()` e `dup2()`.
+
+```text
+msh$ ls | wc -l
+msh$ ls | sort | wc -l
+msh$ cat < teste.txt | sort | uniq > resultado.txt
+```
+
+### Sinais
+
+- **SIGINT (Ctrl+C):** a shell ignora o sinal; os filhos em foreground usam o comportamento normal do sinal.
+- **SIGTSTP (Ctrl+Z):** ignorado pela shell e pelos filhos nesta versão. Não existe suspensão de jobs.
+- **SIGCHLD:** permite recolher processos filhos terminados.
+
+O `sigprocmask()` evita que o tratamento de `SIGCHLD` interfira com o `waitpid()` de comandos em foreground.
+
+## Organização do projeto
+
+```text
+Minishell/
+├── src/
+│   ├── main.c         # Ciclo principal e preparação da linha
+│   ├── parse.c        # Parser original do docente
+│   ├── builtins.c     # Comandos internos
+│   ├── execute.c      # Escolha do tipo de execução
+│   ├── pipes.c        # Processos, pipelines e background
+│   ├── redirect.c     # Redirecionamentos
+│   └── signals.c      # Sinais
+├── include/
+│   ├── header.h       # Estrutura CMD original do docente
+│   └── minishell.h    # Protótipos das funções
+├── tests/
+│   ├── Test.md
+│   └── testes_fase1.md
+├── Makefile
+├── README.md
+└── .gitignore
+```
+
+## Testes
+
+Os comandos de verificação encontram-se em [tests/testes_fase1.md](tests/testes_fase1.md).
+
+## Limitações conhecidas
+
+- O parser original separa principalmente os argumentos por espaços. Não interpreta completamente aspas, escapes, variáveis, expansão de `~` ou padrões como `*.c`.
+- Não são suportados operadores como `&&`, `||` e `;`.
+- O `&` é reconhecido no fim da linha.
+- O número de argumentos é limitado por `MAXARGS`, definido no `header.h`.
+- Não existe controlo completo de jobs: `Ctrl+Z` não suspende processos e o background não utiliza grupos de processos separados.
+- Alguns comandos malformados, como uma linha iniciada por `|`, não apresentam uma mensagem de erro específica.
+
